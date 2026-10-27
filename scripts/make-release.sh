@@ -6,7 +6,7 @@
 #     --url-prefix https://example.com/plugins/ --key /path/to/index.key
 #
 # 产物（release/）：
-#   pfm-pan123-<version>-<platform>.tar.gz   插件包（plugin.json + 可执行文件）
+#   pfm-plugin-driver-pan123-<version>-<platform>.tar.gz   插件包（plugin.json + 可执行文件）
 #   index.json / index.json.sig             签名索引（含本次这一条）
 #
 # 私钥只在发布机上使用，不要放进仓库。
@@ -33,14 +33,14 @@ cd "$(dirname "$0")/.."
 goos=$(go env GOOS)
 goarch=$(go env GOARCH)
 platform="${goos}-${goarch}"
-name="pfm-pan123-${version}-${platform}"
+name="pfm-plugin-driver-pan123-${version}-${platform}"
 
-go build -o "release/pfm-plugin-pan123" .
+go build -o "release/pfm-plugin-driver-pan123" .
 # 用临时目录组织包结构：plugin.json 与可执行文件都在包根
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
-cp plugin.json "release/pfm-plugin-pan123" "$work/"
-tar -czf "release/${name}.tar.gz" -C "$work" plugin.json pfm-plugin-pan123
+cp plugin.json "release/pfm-plugin-driver-pan123" "$work/"
+tar -czf "release/${name}.tar.gz" -C "$work" plugin.json pfm-plugin-driver-pan123
 sha=$(sha256sum "release/${name}.tar.gz" | cut -d' ' -f1)
 
 cat > release/index.json <<JSON
@@ -48,7 +48,8 @@ cat > release/index.json <<JSON
   "seq": ${seq},
   "plugins": [
     {
-      "name": "pfm-pan123",
+      "kind": "driver",
+      "name": "pfm-plugin-driver-pan123",
       "driver_id": "pan123",
       "version": "${version}",
       "abi_version": 1,

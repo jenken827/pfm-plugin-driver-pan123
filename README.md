@@ -1,4 +1,4 @@
-# pfm-pan123
+# pfm-plugin-driver-pan123
 
 123 云盘存储驱动，pfm 的官方插件（独立进程）。
 
@@ -22,7 +22,7 @@ go build -o pfm-plugin-baidu .
 目录布局（放到 pfm 的 `plugin.dir` 下）：
 
 ```
-plugins/pfm-pan123/
+plugins/pfm-plugin-driver-pan123/
   plugin.json
   pfm-plugin-baidu
 ```
@@ -34,7 +34,7 @@ plugin:
   enabled: true
 ```
 
-或从官方索引安装：`pfm plugin install pfm-pan123`。
+或从官方索引安装：`pfm plugin install pfm-plugin-driver-pan123`。
 
 ## 发布
 
@@ -43,9 +43,9 @@ scripts/make-release.sh --version 1.0.0 --seq 1 \
   --url-prefix https://<发布地址>/ --key <索引签名私钥>
 ```
 
-产出 `release/pfm-pan123-1.0.0-<platform>.tar.gz` 与签名索引 `index.json(.sig)`；
+产出 `release/pfm-plugin-driver-pan123-1.0.0-<platform>.tar.gz` 与签名索引 `index.json(.sig)`；
 把包上传到 `--url-prefix` 指向的位置，索引与签名发布到索引仓库即可被
-`pfm plugin install pfm-pan123` 安装。私钥只在发布机上使用，不入仓库。
+`pfm plugin install pfm-plugin-driver-pan123` 安装。私钥只在发布机上使用，不入仓库。
 
 ## 许可
 

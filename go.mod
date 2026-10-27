@@ -1,4 +1,4 @@
-module jenken827.com/jenken827/pfm-plugin-pan123
+module jenken827.com/jenken827/pfm-plugin-driver-pan123
 
 go 1.25.1
 
