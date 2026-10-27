@@ -1,4 +1,5 @@
 {
+  "kind": "driver",
   "driver_id": "pan123",
   "exec": "./pfm-plugin-pan123",
   "abi_version": 1,
