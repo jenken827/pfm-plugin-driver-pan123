@@ -5,7 +5,7 @@
 ## 这是什么
 
 pfm 核心只内置 `local`；其余网盘以**独立进程插件**提供，通过 loopback RPC 与宿主通信
-（协议与安全模型见 pfm 仓库 `DESIGN.md` §11.4）。
+（协议定义在 pfm 仓库的 `proto/wsp/plugin/driver.proto`，实现参考 `plugin/sdk`）。
 
 ⚠️ 插件与宿主**同权限**运行：能读宿主的 `config.yaml`（含全部 token）与 `data/`。
 只安装官方发布或自己构建的二进制。
