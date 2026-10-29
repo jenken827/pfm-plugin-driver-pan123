@@ -1,5 +1,13 @@
 # 构建产物
 /pfm-plugin-driver-pan123
 /pfm-plugin-driver-pan123.exe
+
 # 发布产物
 /release/
+
+# 本地/CI 的打包输出目录
+/dist/
+
+# 本地工作区文件（联调时用 go work init 生成，不入库）
+go.work
+go.work.sum

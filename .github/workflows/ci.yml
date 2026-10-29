@@ -1,0 +1,71 @@
+name: CI
+
+# 分支与 PR 的常规检查：manifest、格式、编译、vet、测试。
+# 发布不在这里做——推送 v* tag 才走 release.yml。
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出本仓库
+        uses: actions/checkout@v4
+
+      # 插件只依赖 SDK（按 tag 从 module 代理取），构建不需要宿主的源码或生成物，
+      # 所以这里只要 Go 本身；Go 版本跟着 go.mod 走，不在工作流里写死。
+      - name: 安装 Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: 检查 plugin.json
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, sys
+          mf = json.load(open("plugin.json"))
+          kind = mf.get("kind")
+          if kind not in ("driver", "downloader"):
+              sys.exit(f"kind 必须是 driver 或 downloader，实际：{kind!r}")
+          required = {"kind", f"{kind}_id", "exec", "abi_version", "name", "version"}
+          missing = required - set(mf)
+          if missing:
+              sys.exit(f"plugin.json 缺少字段: {sorted(missing)}")
+          if mf["abi_version"] != 1:
+              sys.exit(f"abi_version 目前只支持 1，实际：{mf['abi_version']}")
+          if not mf["exec"].startswith("./"):
+              sys.exit(f"exec 必须是包内相对路径（./开头），实际：{mf['exec']}")
+          print("plugin.json 检查通过:", mf["name"], mf["version"])
+          PY
+
+      - name: 检查格式
+        shell: bash
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error::以下文件未 gofmt："
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: 编译
+        run: go build ./...
+
+      - name: vet
+        run: go vet ./...
+
+      - name: 测试
+        run: go test ./...

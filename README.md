@@ -141,15 +141,47 @@ plugin:
 
 ## 发布
 
+推送 tag 即自动构建并发布（`.github/workflows/release.yml`）：
+
 ```bash
-scripts/make-release.sh --version 1.0.0 --seq 1 \
-  --url-prefix https://<发布地址>/ --key <索引签名私钥>
+# 1) 先把 plugin.json 的 version 改成要发的版本
+# 2) 打 tag 并推送（tag 必须等于 v<version>，否则工作流直接失败）
+git tag v1.0.0
+git push origin v1.0.0
 ```
 
-先把 `plugin.json` 的 `version` 改成要发的版本（脚本与索引条目都从它取，别处没有第二份定义）。
-产出 `release/pfm-plugin-driver-pan123-1.0.0-<platform>.tar.gz` 与签名索引 `index.json(.sig)`；
-把包上传到 `--url-prefix` 指向的位置，索引与签名发布到索引仓库即可被
-`pfm plugin install pfm-plugin-driver-pan123` 安装。私钥只在发布机上使用，不入仓库。
+工作流交叉编译 `linux-amd64` / `linux-arm64` / `darwin-amd64` / `darwin-arm64` /
+`windows-amd64`，把 `pfm-plugin-driver-pan123-<version>-<platform>.tar.gz`、`checksums.txt`
+与 `index-entries.json` 作为资产发布到该 tag 的 GitHub Release。Release 说明由提交历史生成：
+`上一个 tag..本 tag` 范围内的提交标题（首个版本列全部提交），也就是「这版改了什么」。
+失败可重跑（同名资产覆盖、说明重写、Release 重新标为已发布，不会重复建）。
+
+发布后把 `index-entries.json` 里的条目并进 `pfm-plugins-index` 的 `index.json`（`seq` 递增），
+在索引仓库重新签名——整份索引共用一个单调递增的 `seq`，所以签名不在本仓库的 CI 里做。
+条目里的 `url` / `sha256` 已经按 Release 资产算好，贴过去即可。
+
+CI 只要 Go：SDK 按 `go.mod` 里的 tag 从 module 代理取，不需要检出宿主或 SDK 的源码，
+Go 版本也直接读 `go.mod`，不在工作流里写死。插件与宿主之间的 ABI 版本由 `plugin.json` 的
+`abi_version` 声明。
+
+分支与 PR 的常规检查（编译 / vet / gofmt / 测试 / `plugin.json` 字段校验）在
+`.github/workflows/ci.yml`。
+
+### 没有 CI 时的手工发布
+
+```bash
+# 当前平台打包 + 生成签名索引（私钥只在发布机上使用，不入仓库）
+scripts/make-release.sh --version 1.0.0 --seq 1 \
+  --repo <owner>/pfm-plugin-driver-pan123 \
+  --base-url <包所在地址> --key <索引签名私钥>
+
+# 或只为多平台包生成索引条目
+scripts/package.sh --version 1.0.0 --goos linux --goarch arm64 --out dist
+scripts/make-index-entries.sh --version 1.0.0 --tag v1.0.0 \
+  --repo <owner>/pfm-plugin-driver-pan123 --dir dist
+```
+
+包名、可执行文件名、`kind` / `driver_id` 这些字段都从 `plugin.json` 取，脚本里没有第二处定义。
 
 ## 许可
 

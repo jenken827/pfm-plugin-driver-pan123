@@ -1,0 +1,160 @@
+name: 发布
+
+# 推送 v* tag 时自动：交叉编译各平台包 → 生成校验和与索引条目 →
+# 建 GitHub Release 并上传资产。
+#
+# 手工补发（例如某个平台构建失败后重跑）：Actions 页面 Run workflow，填 tag。
+# 重复执行会覆盖同名资产，不会重复建 Release。
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 要发布的 tag（如 v1.0.0，必须已存在）
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: 构建 ${{ matrix.platform }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { platform: linux-amd64,   goos: linux,   goarch: amd64 }
+          - { platform: linux-arm64,   goos: linux,   goarch: arm64 }
+          - { platform: darwin-amd64,  goos: darwin,  goarch: amd64 }
+          - { platform: darwin-arm64,  goos: darwin,  goarch: arm64 }
+          - { platform: windows-amd64, goos: windows, goarch: amd64 }
+    steps:
+      - name: 检出本仓库
+        uses: actions/checkout@v4
+
+      - name: 安装 Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: 校验 tag 与 plugin.json 版本一致
+        shell: bash
+        run: |
+          tag="${{ github.event.inputs.tag || github.ref_name }}"
+          version=$(python3 -c 'import json; print(json.load(open("plugin.json"))["version"])')
+          if [ "v${version}" != "${tag}" ]; then
+            echo "::error::tag ${tag} 与 plugin.json 的 version ${version} 不一致（应为 v${version}）"
+            exit 1
+          fi
+          echo "TAG=${tag}" >> "$GITHUB_ENV"
+          echo "VERSION=${version}" >> "$GITHUB_ENV"
+
+      - name: 构建发布包
+        run: |
+          bash scripts/package.sh \
+            --version "$VERSION" \
+            --goos "${{ matrix.goos }}" \
+            --goarch "${{ matrix.goarch }}" \
+            --out dist
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: pkg-${{ matrix.platform }}
+          path: dist/*.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: 发布 Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出本仓库
+        uses: actions/checkout@v4
+        with:
+          # 生成发布说明要按 tag 算变更范围
+          fetch-depth: 0
+
+      - name: 汇总各平台包
+        uses: actions/download-artifact@v4
+        with:
+          pattern: pkg-*
+          merge-multiple: true
+          path: dist
+
+      - name: 解析版本
+        shell: bash
+        run: |
+          tag="${{ github.event.inputs.tag || github.ref_name }}"
+          version=$(python3 -c 'import json; print(json.load(open("plugin.json"))["version"])')
+          if [ "v${version}" != "${tag}" ]; then
+            echo "::error::tag ${tag} 与 plugin.json 的 version ${version} 不一致（应为 v${version}）"
+            exit 1
+          fi
+          echo "TAG=${tag}" >> "$GITHUB_ENV"
+          echo "VERSION=${version}" >> "$GITHUB_ENV"
+
+      - name: 生成校验和与索引条目
+        shell: bash
+        run: |
+          (cd dist && sha256sum ./*.tar.gz > checksums.txt && cat checksums.txt)
+          bash scripts/make-index-entries.sh \
+            --version "$VERSION" \
+            --tag "$TAG" \
+            --repo "${{ github.repository }}" \
+            --dir dist > dist/index-entries.json
+          cat dist/index-entries.json
+
+      - name: 从提交历史生成发布说明
+        shell: bash
+        run: |
+          set -euo pipefail
+          prev=$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)
+          if [ -n "$prev" ]; then
+            range="${prev}..${TAG}"
+            header="自 ${prev} 起的变更"
+          else
+            range="${TAG}"
+            header="首个版本"
+          fi
+          {
+            echo "## ${header}"
+            echo
+            git log --no-merges --pretty='- %s' "$range"
+            if [ -n "$prev" ]; then
+              echo
+              echo "**完整对比**：https://github.com/${GITHUB_REPOSITORY}/compare/${prev}...${TAG}"
+            fi
+          } > release-notes.md
+          cat release-notes.md
+
+      - name: 创建或更新 Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            # 重跑：同名资产覆盖，说明重写。--draft=false 是必须的——把 tag 删了再重推
+            # 会让原来的 Release 变成 draft，光 upload / edit 说明会一直停在未发布状态。
+            gh release upload "$TAG" dist/* --clobber
+            gh release edit "$TAG" --notes-file release-notes.md --draft=false --latest
+          else
+            gh release create "$TAG" dist/* \
+              --title "$TAG" \
+              --notes-file release-notes.md \
+              --latest \
+              --verify-tag
+          fi
