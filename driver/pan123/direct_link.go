@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"jenken827.com/jenken827/pfm/driver/types"
+	"github.com/jenken827/pfm-plugin-sdk/driver/types"
 )
 
 // 编译期断言：驱动改签名时在这里直接失败，而不是静默失去直链能力

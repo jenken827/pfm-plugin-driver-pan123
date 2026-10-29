@@ -10,18 +10,18 @@ import (
 	"strconv"
 	"strings"
 
-	"jenken827.com/jenken827/pfm/driver/types"
-	"jenken827.com/jenken827/pfm/pkg/llog"
+	"github.com/jenken827/pfm-plugin-sdk/driver/types"
+	"github.com/jenken827/pfm-plugin-sdk/plugin/sdk/logx"
 )
 
 // rootFileID 返回配置的根目录 fileId（默认 0 = 根目录）
 func (d *Pan123Driver) rootFileID() int64 {
 	if d.Config != nil {
-		if v := d.Config.GetRootFileId(); v != "" {
+		if v := d.Config.RootFileID; v != "" {
 			if id, err := strconv.ParseInt(v, 10, 64); err == nil && id >= 0 {
 				return id
 			}
-			llog.L().Warnf("123pan invalid root_file_id %q, fallback to 0", v)
+			logx.L().Warnf("123pan invalid root_file_id %q, fallback to 0", v)
 		}
 	}
 	return 0
@@ -170,14 +170,14 @@ func (d *Pan123Driver) tryRapidUpload(ctx context.Context, dirFileID int64,
 	// SHA1 秒传（命中则无需上传任何分片）
 	if reuseResp, rErr := d.sha1Reuse(ctx, dirFileID, uploadName, sha1Hex, fileSize); rErr == nil {
 		if reuseResp.Data.Reuse && reuseResp.Data.FileID != 0 {
-			llog.C(ctx).Infof("123pan rapid upload success (sha1): %s, file_id: %d",
+			logx.C(ctx).Infof("123pan rapid upload success (sha1): %s, file_id: %d",
 				uploadName, reuseResp.Data.FileID)
 			ref := uploadFileRef(reuseResp.Data.FileID, fullPath, uploadName, fileSize, md5Hex)
 			return &ref, nil, nil
 		}
 	} else {
 		// 秒传检查失败不阻断：继续走 create + 分片上传
-		llog.C(ctx).Debugf("123pan sha1 reuse check failed, fallback to upload: %v", rErr)
+		logx.C(ctx).Debugf("123pan sha1 reuse check failed, fallback to upload: %v", rErr)
 	}
 
 	// 创建上传任务（etag=MD5，仍可能秒传）
@@ -186,7 +186,7 @@ func (d *Pan123Driver) tryRapidUpload(ctx context.Context, dirFileID int64,
 		return nil, nil, fmt.Errorf("create upload task failed: %w", err)
 	}
 	if createResp.Data.Reuse && createResp.Data.FileID != 0 {
-		llog.C(ctx).Infof("123pan rapid upload success (etag): %s, file_id: %d",
+		logx.C(ctx).Infof("123pan rapid upload success (etag): %s, file_id: %d",
 			uploadName, createResp.Data.FileID)
 		ref := uploadFileRef(createResp.Data.FileID, fullPath, uploadName, fileSize, md5Hex)
 		return &ref, nil, nil
@@ -208,7 +208,7 @@ func (d *Pan123Driver) uploadPrepared(ctx context.Context, file *os.File,
 		return nil, fmt.Errorf("complete upload failed: %w", err)
 	}
 
-	llog.C(ctx).Infof("123pan upload success: %s, file_id: %d, size: %d",
+	logx.C(ctx).Infof("123pan upload success: %s, file_id: %d, size: %d",
 		uploadName, fileID, fileSize)
 	return []types.FileRef{
 		uploadFileRef(fileID, fullPath, uploadName, fileSize, md5Hex),
@@ -387,7 +387,7 @@ func (d *Pan123Driver) BatchDelete(ctx context.Context, refs []types.FileRef) ([
 	}
 
 	if err := d.trash(ctx, fileIDs); err != nil {
-		llog.C(ctx).Errorf("123pan batch delete failed: %v", err)
+		logx.C(ctx).Errorf("123pan batch delete failed: %v", err)
 		for i := range refs {
 			results[i].Error = err
 		}
@@ -398,9 +398,9 @@ func (d *Pan123Driver) BatchDelete(ctx context.Context, refs []types.FileRef) ([
 		for _, i := range idxs {
 			results[i].Success = true
 		}
-		llog.C(ctx).Debugf("123pan trashed file_id: %d", fileID)
+		logx.C(ctx).Debugf("123pan trashed file_id: %d", fileID)
 	}
-	llog.C(ctx).Infof("123pan batch delete success: %d/%d files",
+	logx.C(ctx).Infof("123pan batch delete success: %d/%d files",
 		countSuccess(results), len(results))
 	return results, nil
 }

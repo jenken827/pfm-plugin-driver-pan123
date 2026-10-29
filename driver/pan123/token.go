@@ -10,9 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"jenken827.com/jenken827/pfm/pkg/llog"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
-	"jenken827.com/jenken827/pfm/utils"
+	"github.com/jenken827/pfm-plugin-sdk/plugin/sdk/logx"
 )
 
 // preservedAccessTokenLifetime 手填 access_token 的保守有效期。
@@ -177,14 +175,14 @@ func (tm *tokenManager) flush(ctx context.Context, c credentials) error {
 //
 // 比 pfm 多两个前置条件；此处改为更保守的策略：不清空手填 token，
 // 让它先按保守有效期使用，401 时再由 getAccessToken(force=true) 触发续期。
-func initTokenManager(cfg *native.Pan123DriverConfig) *tokenManager {
+func initTokenManager(cfg *Config) *tokenManager {
 	tm := &tokenManager{}
 	if cfg == nil {
 		return tm
 	}
 
-	tm.accessToken = cfg.GetAccessToken()
-	tm.refreshToken = cfg.GetRefreshToken()
+	tm.accessToken = cfg.AccessToken
+	tm.refreshToken = cfg.RefreshToken
 
 	if tm.accessToken != "" {
 		// 手填 access_token：按保守有效期使用（123 JWT 的 exp 虽可解出，
@@ -312,21 +310,21 @@ func renewViaOnlineAPI(ctx context.Context, apiURL, refreshUI string) (accessTok
 // （与 aliyundrive_open 的 persistTokens 行为一致）
 func (d *Pan123Driver) persistTokens() {
 	// 先写回内存配置，再序列化（顺序不能反，否则持久化的是旧 token）
-	d.Config.AccessToken = utils.StringPtr(d.tm.accessToken)
+	d.Config.AccessToken = d.tm.accessToken
 	if d.tm.refreshToken != "" {
-		d.Config.RefreshToken = utils.StringPtr(d.tm.refreshToken)
+		d.Config.RefreshToken = d.tm.refreshToken
 	}
 
 	cfgJSON, err := json.Marshal(d.Config)
 	if err != nil {
-		llog.L().Errorf("123pan marshal config failed: %v", err)
+		logx.L().Errorf("123pan marshal config failed: %v", err)
 		return
 	}
 
-	if d.configPersister == nil || d.Orm == nil || d.Orm.Id == nil {
+	if d.configPersister == nil || d.providerID == 0 {
 		return
 	}
-	if err := d.configPersister.UpdateConfig(*d.Orm.Id, string(cfgJSON)); err != nil {
-		llog.L().Errorf("123pan persist refreshed token failed: %v", err)
+	if err := d.configPersister.UpdateConfig(d.providerID, string(cfgJSON)); err != nil {
+		logx.L().Errorf("123pan persist refreshed token failed: %v", err)
 	}
 }

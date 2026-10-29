@@ -7,13 +7,17 @@
 
 ## 这是什么
 
-[pfm](https://github.com/jenken827/pfm) 核心只内置 `local`；其余网盘以**独立进程插件**提供，通过 loopback RPC 与宿主通信。
+[pfm](https://github.com/jenken827/pfm) 核心只内置 `local`；其余网盘以**独立进程插件**提供，通过 loopback RPC 与宿主通信
+（协议定义在 [pfm-plugin-sdk](https://github.com/jenken827/pfm-plugin-sdk) 的 `proto/plugin` 与 `proto/abi`）。
 
 ⚠️ 插件与宿主**同权限**运行：能读宿主的 `config.yaml`（含全部 token）与 `data/`。
 只安装官方发布或自己构建的二进制。
 
 驱动走 123 云盘开放平台 Open API（`https://open-api.123pan.com`）：目录以 `fileId` 组织，
 上传按「SHA1 秒传 → etag 秒传 → 分片上传 → 合并轮询」编排，下载用直链 + HTTP Range。
+
+日志走 stderr，由宿主逐行转发进宿主日志（`[plugin pan123 stderr] ...`）；级别可用环境变量
+`PFM_PLUGIN_LOG_LEVEL`（`debug` / `info` / `warn` / `error`，默认 `info`）调整。
 
 ## 授权（没有开发者凭据也能用）
 
@@ -63,9 +67,9 @@
 | `root_file_id` | pfm 逻辑根目录对应的 123 `fileId`，`0` 表示网盘根 | `0` |
 | `upload_thread` | 分片上传并发数（1-32） | `3` |
 
-配置结构与表单字段声明在宿主侧 proto（`native.Pan123DriverConfig`）里，本仓库的
-`driver/pan123/init.go` 只负责声明表单字段；JSON 键名与 `ConfigField.Name` 逐字一致，宿主把它当
-不透明 JSON 字符串存取。加一个配置项要同时改 proto 与本仓库的字段声明。
+配置结构由本仓库自己定义（`driver/pan123/config.go`），表单字段在 `driver/pan123/init.go` 声明；
+宿主只把 `storage_providers.config` 当作不透明 JSON 字符串存取。JSON 键名与 `ConfigField.Name`
+逐字一致，加/改一个配置项只需要改本仓库，不用动宿主或 proto。
 
 凭据字段都可留空，但**至少要填一组**（`client_id` / `client_secret` 成对、`refresh_token`、`access_token` 任一）：
 都没填时初始化只告警，实际请求时才报认证错误。
@@ -100,16 +104,21 @@ OpenList 与 pfm 同为 AGPL-3.0。
 
 ## 构建
 
-本仓库的 `go.mod` 通过 `replace` 直接依赖 [pfm](https://github.com/jenken827/pfm) 仓库的 Go 包
-（驱动类型、proto、插件运行时），所以 pfm 源码要与本仓库放在**同一父目录**：
+本插件**不 import 宿主仓库的任何代码**，只依赖插件 SDK
+（`github.com/jenken827/pfm-plugin-sdk`）；SDK 版本写在 `go.mod` 里，按 tag 从 Go module 代理取：
 
 ```bash
 go build -trimpath -o pfm-plugin-driver-pan123 .
 ```
 
-这些包在新版 pfm 里已拆到 [pfm-plugin-sdk](https://github.com/jenken827/pfm-plugin-sdk) 与
-[pfm-proto](https://github.com/jenken827/pfm-proto)，本插件仍按旧路径导入，所以要用一份**仍包含这些包的 pfm 源码**。
-宿主的驱动接口或 proto 变了就要跟着改并重编，宿主加载插件时也会比对 ABI 版本，不一致会直接报「协议版本不兼容」。
+要同时改 SDK 时用工作区把两个目录并起来，`go.work` 不入库：
+
+```bash
+go work init . ../pfm-plugin-sdk
+```
+
+插件与 SDK 的协议版本必须一致：SDK 的 `plugin/sdk.AbiVersion` 变了就要重编插件，
+宿主加载时也会比对，不一致会直接报「协议版本 N 与宿主 M 不兼容」。
 
 ## 安装
 

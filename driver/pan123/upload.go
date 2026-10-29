@@ -17,7 +17,7 @@ import (
 	"sync"
 	"time"
 
-	"jenken827.com/jenken827/pfm/pkg/llog"
+	"github.com/jenken827/pfm-plugin-sdk/plugin/sdk/logx"
 )
 
 // sha1Reuse 尝试 SHA1 秒传（123 侧命中已存在内容时直接返回 fileId）
@@ -111,7 +111,7 @@ func (d *Pan123Driver) uploadSlices(ctx context.Context, file *os.File, createRe
 				errChan <- fmt.Errorf("upload slice %d failed: %w", sliceNo, err)
 				return
 			}
-			llog.C(ctx).Debugf("123pan uploaded slice %d/%d", sliceNo, sliceCount)
+			logx.C(ctx).Debugf("123pan uploaded slice %d/%d", sliceNo, sliceCount)
 		}(sliceNo, offset, size)
 	}
 
@@ -272,8 +272,8 @@ func sleepOrDone(ctx context.Context, d time.Duration) bool {
 
 // uploadThreads 解析上传并发数（1-32，默认 3）
 func (d *Pan123Driver) uploadThreads() int {
-	if d.Config != nil && d.Config.UploadThread != nil {
-		if t, err := strconv.Atoi(*d.Config.UploadThread); err == nil && t >= 1 && t <= 32 {
+	if d.Config != nil {
+		if t := int(d.Config.UploadThread.Int()); t >= 1 && t <= 32 {
 			return t
 		}
 	}

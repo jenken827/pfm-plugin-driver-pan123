@@ -5,8 +5,8 @@
 package main
 
 import (
-	_ "jenken827.com/jenken827/pfm-plugin-driver-pan123/driver/pan123"
-	"jenken827.com/jenken827/pfm/plugin/sdk"
+	_ "github.com/jenken827/pfm-plugin-driver-pan123/driver/pan123"
+	"github.com/jenken827/pfm-plugin-sdk/plugin/sdk"
 )
 
 func main() {

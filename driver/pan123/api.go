@@ -14,17 +14,16 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jenken827/pfm-plugin-sdk/driver/types"
+	"github.com/jenken827/pfm-plugin-sdk/plugin/sdk/logx"
 	"golang.org/x/time/rate"
-	"jenken827.com/jenken827/pfm/driver/types"
-	"jenken827.com/jenken827/pfm/pkg/llog"
-	"jenken827.com/jenken827/pfm/proto/gen/entity"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
 )
 
 // Pan123Driver 123云盘驱动（开放平台 Open API 模式）
 type Pan123Driver struct {
-	Config *native.Pan123DriverConfig
-	Orm    *entity.StorageProviderORM
+	Config *Config
+	// providerID 宿主下发的 provider 主键，仅用于把刷新后的 token 回写配置
+	providerID uint32
 
 	ProviderConfig  types.ProviderConfig
 	configPersister types.ProviderConfigPersister
@@ -42,12 +41,12 @@ type Pan123Driver struct {
 
 // GetType 获取存储驱动类型
 func (d *Pan123Driver) GetType() string {
-	return types.DriverPan123
+	return DriverID
 }
 
 // GetName 获取驱动名称
 func (d *Pan123Driver) GetName() string {
-	return types.DriverPan123
+	return DriverID
 }
 
 // GetConfig 获取驱动配置
@@ -169,13 +168,13 @@ func (d *Pan123Driver) requestJSON(ctx context.Context, method, endpoint string,
 			return respBody, nil
 		case 401:
 			// token 失效：强制刷新后重试
-			llog.C(ctx).Warnf("123pan token unauthorized on %s, refreshing", endpoint)
+			logx.C(ctx).Warnf("123pan token unauthorized on %s, refreshing", endpoint)
 			if _, err := d.tm.getAccessToken(ctx, d.creds, true); err != nil {
 				return nil, fmt.Errorf("refresh token failed: %w", err)
 			}
 			continue
 		case 429:
-			llog.C(ctx).Warnf("123pan rate limited on %s, retry after 500ms", endpoint)
+			logx.C(ctx).Warnf("123pan rate limited on %s, retry after 500ms", endpoint)
 			time.Sleep(500 * time.Millisecond)
 			continue
 		default:

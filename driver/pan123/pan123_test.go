@@ -22,10 +22,8 @@ import (
 	"testing"
 	"time"
 
-	"jenken827.com/jenken827/pfm/driver/types"
-	"jenken827.com/jenken827/pfm/proto/gen/entity"
-	"jenken827.com/jenken827/pfm/proto/gen/native"
-	"jenken827.com/jenken827/pfm/utils"
+	"github.com/jenken827/pfm-plugin-sdk/driver/types"
+	"github.com/jenken827/pfm-plugin-sdk/plugin/sdk"
 )
 
 // fakeNode 假服务器上的文件/目录节点
@@ -446,14 +444,14 @@ func (f *fake123) fileContent(fileID int64) ([]byte, bool) {
 }
 
 // newTestDriver 用给定配置构造指向假服务器的驱动
-func newTestDriver(cfg *native.Pan123DriverConfig) *Pan123Driver {
+func newTestDriver(cfg *Config) *Pan123Driver {
 	return &Pan123Driver{
 		Config:         cfg,
 		ProviderConfig: types.ProviderConfig{},
 		creds: credentials{
-			clientID:     cfg.GetClientId(),
-			clientSecret: cfg.GetClientSecret(),
-			apiURL:       cfg.GetApiUrl(),
+			clientID:     cfg.ClientID,
+			clientSecret: cfg.ClientSecret,
+			apiURL:       cfg.APIURL,
 		},
 		tm:     initTokenManager(cfg),
 		client: newHTTPClient(),
@@ -474,10 +472,10 @@ func TestUploadDirParentage(t *testing.T) {
 	cleanup := fake.start(t)
 	defer cleanup()
 
-	d := newTestDriver(&native.Pan123DriverConfig{
-		RefreshToken: utils.StringPtr("rt1"),
-		RootFileId:   utils.StringPtr("0"),
-		ApiUrl:       utils.StringPtr(fake.baseURL + "/renewapi"),
+	d := newTestDriver(&Config{
+		RefreshToken: "rt1",
+		RootFileID:   "0",
+		APIURL:       fake.baseURL + "/renewapi",
 	})
 	if err := d.warmup(); err != nil {
 		t.Fatalf("warmup failed: %v", err)
@@ -536,10 +534,10 @@ func TestUploadDirParentageExistingYear(t *testing.T) {
 	fake.nodes[yearID] = &fakeNode{id: yearID, name: year, parentID: 0, isDir: true}
 	fake.mu.Unlock()
 
-	d := newTestDriver(&native.Pan123DriverConfig{
-		RefreshToken: utils.StringPtr("rt1"),
-		RootFileId:   utils.StringPtr("0"),
-		ApiUrl:       utils.StringPtr(fake.baseURL + "/renewapi"),
+	d := newTestDriver(&Config{
+		RefreshToken: "rt1",
+		RootFileID:   "0",
+		APIURL:       fake.baseURL + "/renewapi",
 	})
 	if err := d.warmup(); err != nil {
 		t.Fatalf("warmup failed: %v", err)
@@ -591,10 +589,10 @@ func TestResolveCacheKeysAreNormalized(t *testing.T) {
 	cleanup := fake.start(t)
 	defer cleanup()
 
-	d := newTestDriver(&native.Pan123DriverConfig{
-		RefreshToken: utils.StringPtr("rt1"),
-		RootFileId:   utils.StringPtr("0"),
-		ApiUrl:       utils.StringPtr(fake.baseURL + "/renewapi"),
+	d := newTestDriver(&Config{
+		RefreshToken: "rt1",
+		RootFileID:   "0",
+		APIURL:       fake.baseURL + "/renewapi",
 	})
 	if err := d.warmup(); err != nil {
 		t.Fatalf("warmup failed: %v", err)
@@ -657,11 +655,11 @@ func TestHandFilledAccessTokenTakesPriority(t *testing.T) {
 	defer cleanup()
 
 	const handToken = "hand-filled-access-token"
-	d := newTestDriver(&native.Pan123DriverConfig{
-		AccessToken:  utils.StringPtr(handToken),
-		RefreshToken: utils.StringPtr("rt-should-not-be-used"),
-		RootFileId:   utils.StringPtr("0"),
-		ApiUrl:       utils.StringPtr(fake.baseURL + "/renewapi"),
+	d := newTestDriver(&Config{
+		AccessToken:  handToken,
+		RefreshToken: "rt-should-not-be-used",
+		RootFileID:   "0",
+		APIURL:       fake.baseURL + "/renewapi",
 	})
 
 	if d.tm.accessToken != handToken {
@@ -805,10 +803,10 @@ func TestResolveFallsBackWhenMkdirReturnsZero(t *testing.T) {
 	cleanup := fake.start(t)
 	defer cleanup()
 
-	d := newTestDriver(&native.Pan123DriverConfig{
-		RefreshToken: utils.StringPtr("rt1"),
-		RootFileId:   utils.StringPtr("0"),
-		ApiUrl:       utils.StringPtr(fake.baseURL + "/renewapi"),
+	d := newTestDriver(&Config{
+		RefreshToken: "rt1",
+		RootFileID:   "0",
+		APIURL:       fake.baseURL + "/renewapi",
 	})
 	if err := d.warmup(); err != nil {
 		t.Fatalf("warmup failed: %v", err)
@@ -864,7 +862,7 @@ func TestCompletePollsThroughVerifyingCode(t *testing.T) {
 	APIBase = srv.URL
 	defer func() { APIBase = oldBase }()
 
-	d := newTestDriver(&native.Pan123DriverConfig{})
+	d := newTestDriver(&Config{})
 	d.tm = &tokenManager{accessToken: "tok", expiredAt: time.Now().Add(time.Hour)}
 
 	fid, err := d.complete(context.Background(), "preupload-1")
@@ -898,12 +896,12 @@ func TestPersistTokensWritesRotatedRefreshToken(t *testing.T) {
 	defer cleanup()
 
 	// fake 的 renewapi 返回 refresh_token = "refresh-token-rotated"
-	d := newTestDriver(&native.Pan123DriverConfig{
-		RefreshToken: utils.StringPtr("rt-user-original-value"),
-		RootFileId:   utils.StringPtr("0"),
-		ApiUrl:       utils.StringPtr(fake.baseURL + "/renewapi"),
+	d := newTestDriver(&Config{
+		RefreshToken: "rt-user-original-value",
+		RootFileID:   "0",
+		APIURL:       fake.baseURL + "/renewapi",
 	})
-	d.Orm = &entity.StorageProviderORM{Id: utils.Uint32Ptr(7)}
+	d.providerID = 7
 	persister := &fakePersister{}
 	d.SetConfigPersister(persister)
 
@@ -915,16 +913,16 @@ func TestPersistTokensWritesRotatedRefreshToken(t *testing.T) {
 		t.Fatal("persistTokens 未写回配置")
 	}
 
-	var saved native.Pan123DriverConfig
+	var saved Config
 	if err := json.Unmarshal([]byte(persister.last), &saved); err != nil {
 		t.Fatalf("parse saved config failed: %v", err)
 	}
 	// 轮换值必须落库，否则下一次续期用过期的单次令牌
-	if got := saved.GetRefreshToken(); got != "refresh-token-rotated" {
+	if got := saved.RefreshToken; got != "refresh-token-rotated" {
 		t.Errorf("写回的 refresh_token = %q，应为 renewapi 返回的轮换值 %q（官方要求保存新值）",
 			got, "refresh-token-rotated")
 	}
-	if got := saved.GetAccessToken(); got != "token-from-renew-api" {
+	if got := saved.AccessToken; got != "token-from-renew-api" {
 		t.Errorf("写回的 access_token = %q，应为本次续期得到的 %q", got, "token-from-renew-api")
 	}
 }
@@ -958,11 +956,11 @@ func TestUploadDownloadDelete(t *testing.T) {
 	cleanup := fake.start(t)
 	defer cleanup()
 
-	d := newTestDriver(&native.Pan123DriverConfig{
-		ClientId:     utils.StringPtr("test-client"),
-		ClientSecret: utils.StringPtr("test-secret"),
-		RootFileId:   utils.StringPtr("0"),
-		UploadThread: utils.StringPtr("4"),
+	d := newTestDriver(&Config{
+		ClientID:     "test-client",
+		ClientSecret: "test-secret",
+		RootFileID:   "0",
+		UploadThread: "4",
 	})
 
 	// 1. 初始化：换 token + 读用户信息
@@ -1101,8 +1099,8 @@ func TestBatchDeleteInvalidFileID(t *testing.T) {
 	cleanup := fake.start(t)
 	defer cleanup()
 
-	d := newTestDriver(&native.Pan123DriverConfig{
-		AccessToken: utils.StringPtr("manual-token"),
+	d := newTestDriver(&Config{
+		AccessToken: "manual-token",
 	})
 
 	results, err := d.BatchDelete(context.Background(), []types.FileRef{
@@ -1142,9 +1140,9 @@ func TestRenewAPIRefreshToken(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	tm := initTokenManager(&native.Pan123DriverConfig{
-		RefreshToken: utils.StringPtr("user-provided-refresh-token"),
-		ApiUrl:       utils.StringPtr(srv.URL + "/renewapi"),
+	tm := initTokenManager(&Config{
+		RefreshToken: "user-provided-refresh-token",
+		APIURL:       srv.URL + "/renewapi",
 	})
 	// 无手填 access_token 时走续期路径；手填 token 优先的新语义下
 	// accessToken 为空（未配置），warmup/first call 会真正续期
@@ -1201,8 +1199,8 @@ func TestRenewAPIRefreshToken(t *testing.T) {
 
 // TestManualAccessTokenFallback 手填 access_token 时不主动刷新，按 90 天过期处理
 func TestManualAccessTokenFallback(t *testing.T) {
-	tm := initTokenManager(&native.Pan123DriverConfig{
-		AccessToken: utils.StringPtr("manual-token"),
+	tm := initTokenManager(&Config{
+		AccessToken: "manual-token",
 	})
 	if tm.accessToken != "manual-token" {
 		t.Errorf("tm.accessToken = %q, want manual-token", tm.accessToken)
@@ -1235,9 +1233,9 @@ func TestTokenBlockedAfterFailure(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	tm := initTokenManager(&native.Pan123DriverConfig{
-		RefreshToken: utils.StringPtr("bad-token"),
-		ApiUrl:       utils.StringPtr(srv.URL + "/renewapi"),
+	tm := initTokenManager(&Config{
+		RefreshToken: "bad-token",
+		APIURL:       srv.URL + "/renewapi",
 	})
 	creds := credentials{apiURL: srv.URL + "/renewapi"}
 
@@ -1306,16 +1304,16 @@ func TestRequest401TriggersRefresh(t *testing.T) {
 	defer func() { APIBase, RenewAPIDefault = oldBase, oldRenew }()
 
 	// 预置一个"已过期"的 token，让首次请求走 401 分支
-	tm := initTokenManager(&native.Pan123DriverConfig{
-		RefreshToken: utils.StringPtr("initial-refresh"),
-		ApiUrl:       utils.StringPtr(srv.URL + "/renewapi"),
+	tm := initTokenManager(&Config{
+		RefreshToken: "initial-refresh",
+		APIURL:       srv.URL + "/renewapi",
 	})
 	tm.accessToken = "stale-token"
 	tm.expiredAt = time.Now().Add(time.Hour)
 
-	d := newTestDriver(&native.Pan123DriverConfig{
-		RefreshToken: utils.StringPtr("initial-refresh"),
-		ApiUrl:       utils.StringPtr(srv.URL + "/renewapi"),
+	d := newTestDriver(&Config{
+		RefreshToken: "initial-refresh",
+		APIURL:       srv.URL + "/renewapi",
 	})
 	d.tm = tm
 
@@ -1389,7 +1387,7 @@ func TestUploadThreads(t *testing.T) {
 	}
 	for _, c := range cases {
 		d := &Pan123Driver{
-			Config: &native.Pan123DriverConfig{UploadThread: utils.StringPtr(c.in)},
+			Config: &Config{UploadThread: sdk.FormNum(c.in)},
 		}
 		if got := d.uploadThreads(); got != c.want {
 			t.Errorf("uploadThreads(%q) = %d, want %d", c.in, got, c.want)
@@ -1443,23 +1441,23 @@ func TestComputeFileHashes(t *testing.T) {
 func TestCheckCredentials(t *testing.T) {
 	cases := []struct {
 		name    string
-		cfg     *native.Pan123DriverConfig
+		cfg     *Config
 		wantErr bool
 	}{
-		{"client credentials", &native.Pan123DriverConfig{
-			ClientId:     utils.StringPtr("id"),
-			ClientSecret: utils.StringPtr("secret"),
+		{"client credentials", &Config{
+			ClientID:     "id",
+			ClientSecret: "secret",
 		}, false},
-		{"refresh token", &native.Pan123DriverConfig{
-			RefreshToken: utils.StringPtr("rt"),
+		{"refresh token", &Config{
+			RefreshToken: "rt",
 		}, false},
-		{"access token", &native.Pan123DriverConfig{
-			AccessToken: utils.StringPtr("at"),
+		{"access token", &Config{
+			AccessToken: "at",
 		}, false},
-		{"client id without secret", &native.Pan123DriverConfig{
-			ClientId: utils.StringPtr("id"),
+		{"client id without secret", &Config{
+			ClientID: "id",
 		}, true},
-		{"empty", &native.Pan123DriverConfig{}, true},
+		{"empty", &Config{}, true},
 	}
 	for _, c := range cases {
 		err := checkCredentials(c.cfg)
@@ -1483,7 +1481,7 @@ func TestRootFileID(t *testing.T) {
 	}
 	for _, c := range cases {
 		d := &Pan123Driver{
-			Config: &native.Pan123DriverConfig{RootFileId: utils.StringPtr(c.in)},
+			Config: &Config{RootFileID: c.in},
 		}
 		if got := d.rootFileID(); got != c.want {
 			t.Errorf("rootFileID(%q) = %d, want %d", c.in, got, c.want)
@@ -1493,5 +1491,35 @@ func TestRootFileID(t *testing.T) {
 	d := &Pan123Driver{}
 	if got := d.rootFileID(); got != 0 {
 		t.Errorf("rootFileID(nil config) = %d, want 0", got)
+	}
+}
+
+// TestConfigLegacyJSON 旧版宿主 proto 落库的配置 JSON 必须还能读：
+// 键名为 snake_case，数字字段可能写成 3 或 "3"。
+func TestConfigLegacyJSON(t *testing.T) {
+	raw := `{"client_id":"cid","client_secret":"sec","refresh_token":"rt",` +
+		`"access_token":"at","api_url":"https://api.oplist.org/123cloud/renewapi",` +
+		`"root_file_id":"12345","upload_thread":4}`
+	var cfg Config
+	if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
+		t.Fatalf("unmarshal legacy config failed: %v", err)
+	}
+	if cfg.ClientID != "cid" || cfg.ClientSecret != "sec" ||
+		cfg.RefreshToken != "rt" || cfg.AccessToken != "at" {
+		t.Errorf("凭据字段解析错误: %+v", cfg)
+	}
+	if cfg.APIURL != "https://api.oplist.org/123cloud/renewapi" || cfg.RootFileID != "12345" {
+		t.Errorf("续期地址/根目录解析错误: %+v", cfg)
+	}
+	if got := cfg.UploadThread.Int(); got != 4 {
+		t.Errorf("upload_thread = %d, want 4", got)
+	}
+
+	var quoted Config
+	if err := json.Unmarshal([]byte(`{"upload_thread":"8"}`), &quoted); err != nil {
+		t.Fatalf("unmarshal quoted upload_thread failed: %v", err)
+	}
+	if got := quoted.UploadThread.Int(); got != 8 {
+		t.Errorf("quoted upload_thread = %d, want 8", got)
 	}
 }

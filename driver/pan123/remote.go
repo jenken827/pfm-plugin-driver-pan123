@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"jenken827.com/jenken827/pfm/driver/types"
+	"github.com/jenken827/pfm-plugin-sdk/driver/types"
 )
 
 var _ types.RemoteLister = (*Pan123Driver)(nil)
